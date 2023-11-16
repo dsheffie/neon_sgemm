@@ -7,6 +7,8 @@
 #include <type_traits>
 #include <sys/time.h>
 #include <time.h>
+#include <arm_neon.h>
+
 
 double timestamp() {
   struct timeval tv;
@@ -15,40 +17,43 @@ double timestamp() {
 }
 
 
-template <typename T> 
-void gemm(T *Cg, T *Ag, T *Bg, int n, int m, int _k) {
-  static const int II_BLK = 4;
+//template <typename T>
+
+void gemm(float *Cg, float *Ag, float *Bg, int n, int m, int _k) {
+  static const int II_BLK = 3;
   static const int JJ_BLK = 8;
   static const int KK_BLK = 32;
-  
-  T Ctile[II_BLK][JJ_BLK];
 
+  float32x4_t vC_tile[II_BLK][JJ_BLK];
   
   //the whole matrix
   for(int i = 0; i < n; i+=II_BLK) {
     for(int j = 0; j < m; j+=JJ_BLK) {
 
-	
       for(int ii = 0; ii < II_BLK; ii++) {      
-	for(int jj = 0; jj < JJ_BLK; jj++) {
-	  Ctile[ii][jj] = Cg[(i+ii)*n+j+jj];
+	for(int jj = 0; jj < (JJ_BLK/4); jj++) {
+	  vC_tile[ii][jj] = vld1q_f32( &Cg[(i+ii)*n+j+(jj*4)] );
 	}
       }
 
 
       for(int k = 0; k < _k; k+=KK_BLK) {	
-	for(int ii = 0; ii < II_BLK; ii++) {    
-	  for(int jj = 0; jj < JJ_BLK; jj++) {
-	    for(int kk = 0; kk < KK_BLK; kk++) {		    
-	      Ctile[ii][jj] += Ag[(i+ii)*_k+(k+kk)]*Bg[(k+kk)*m+j+jj];
+	for(int ii = 0; ii < II_BLK; ii++) {
+	  for(int kk = 0; kk < KK_BLK; kk++) {
+	    float32x4_t vA = vdupq_n_f32(Ag[(i+ii)*_k+(k+kk)]);
+	    for(int jj = 0; jj < (JJ_BLK/4); jj++) {
+	      float32x4_t vB = vld1q_f32(&Bg[(k+kk)*m+j+(jj*4)]);
+	      float32x4_t vT = vmulq_f32(vA, vB);	      
+	      vC_tile[ii][jj] = vaddq_f32(vC_tile[ii][jj], vT);
 	    }
 	  }
 	}
       }
 
+      
       for(int ii = 0; ii < II_BLK; ii++) {      
-	for(int jj = 0; jj < JJ_BLK; jj++) {
-	  Cg[(i+ii)*n+j+jj] += Ctile[ii][jj];
+	for(int jj = 0; jj < (JJ_BLK/4); jj++) {
+	  vst1q_f32( &Cg[(i+ii)*n+j+(jj*4)], vC_tile[ii][jj]);
 	}
       }
       
@@ -88,7 +93,8 @@ T rand() {
 #define print_var(X) std::cout << #X << " = " << X << "\n";
 
 int main() {
-  uint32_t l = 512;
+  uint32_t l = 240;
+  assert((l % 6) == 0);
   uint32_t n = l ,m= l ,k= l;
 
   print_var(n);
@@ -118,7 +124,7 @@ int main() {
     B[i] = rand<float>();
 
   double t0 = timestamp();
-  gemm<float>(C0,A,B,n,m,k);
+  gemm(C0,A,B,n,m,k);
   double t1 = timestamp();
 
   std::cout << "optimized gemm " << gflops/(t1-t0) << " gflops/s\n";
