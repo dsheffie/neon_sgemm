@@ -20,43 +20,135 @@ double timestamp() {
 //template <typename T>
 
 void gemm(float *Cg, float *Ag, float *Bg, int n, int m, int _k) {
-  static const int II_BLK = 3;
-  static const int JJ_BLK = 8;
+  static const int VL = 4;
+  static const int II_BLK = 4;
+  static const int JJ_VL_BLK = 6;
+  static const int JJ_BLK = VL * JJ_VL_BLK;
+
   static const int KK_BLK = 32;
 
   float32x4_t vC_tile[II_BLK][JJ_BLK];
+
+  float32x4_t vC0_0, vC0_1, vC0_2, vC0_3, vC0_4,  vC0_5;
+  float32x4_t vC1_0, vC1_1, vC1_2, vC1_3, vC1_4,  vC1_5;
+  float32x4_t vC2_0, vC2_1, vC2_2, vC2_3, vC2_4,  vC2_5;
+  float32x4_t vC3_0, vC3_1, vC3_2, vC3_3, vC3_4,  vC3_5;  
+
   
   //the whole matrix
   for(int i = 0; i < n; i+=II_BLK) {
     for(int j = 0; j < m; j+=JJ_BLK) {
 
       for(int ii = 0; ii < II_BLK; ii++) {      
-	for(int jj = 0; jj < (JJ_BLK/4); jj++) {
-	  vC_tile[ii][jj] = vld1q_f32( &Cg[(i+ii)*n+j+(jj*4)] );
+	for(int jj = 0; jj < JJ_VL_BLK; jj++) {
+	  vC_tile[ii][jj] = vld1q_f32( &Cg[(i+ii)*n+j+(jj*VL)] );
 	}
       }
 
+      vC0_0 = vld1q_f32( &Cg[(i+0)*n+j+(0*VL)] );
+      vC0_1 = vld1q_f32( &Cg[(i+0)*n+j+(1*VL)] );
+      vC0_2 = vld1q_f32( &Cg[(i+0)*n+j+(2*VL)] );
+      vC0_3 = vld1q_f32( &Cg[(i+0)*n+j+(3*VL)] );
+      vC0_4 = vld1q_f32( &Cg[(i+0)*n+j+(4*VL)] );
+      vC0_5 = vld1q_f32( &Cg[(i+0)*n+j+(5*VL)] );                  
 
-      for(int k = 0; k < _k; k+=KK_BLK) {	
-	for(int ii = 0; ii < II_BLK; ii++) {
-	  for(int kk = 0; kk < KK_BLK; kk++) {
-	    float32x4_t vA = vdupq_n_f32(Ag[(i+ii)*_k+(k+kk)]);
-	    for(int jj = 0; jj < (JJ_BLK/4); jj++) {
-	      float32x4_t vB = vld1q_f32(&Bg[(k+kk)*m+j+(jj*4)]);
-	      float32x4_t vT = vmulq_f32(vA, vB);	      
-	      vC_tile[ii][jj] = vaddq_f32(vC_tile[ii][jj], vT);
-	    }
-	  }
-	}
-      }
+      vC1_0 = vld1q_f32( &Cg[(i+1)*n+j+(0*VL)] );
+      vC1_1 = vld1q_f32( &Cg[(i+1)*n+j+(1*VL)] );
+      vC1_2 = vld1q_f32( &Cg[(i+1)*n+j+(2*VL)] );
+      vC1_3 = vld1q_f32( &Cg[(i+1)*n+j+(3*VL)] );
+      vC1_4 = vld1q_f32( &Cg[(i+1)*n+j+(4*VL)] );
+      vC1_5 = vld1q_f32( &Cg[(i+1)*n+j+(5*VL)] );                  
 
+      vC2_0 = vld1q_f32( &Cg[(i+2)*n+j+(0*VL)] );
+      vC2_1 = vld1q_f32( &Cg[(i+2)*n+j+(1*VL)] );
+      vC2_2 = vld1q_f32( &Cg[(i+2)*n+j+(2*VL)] );
+      vC2_3 = vld1q_f32( &Cg[(i+2)*n+j+(3*VL)] );
+      vC2_4 = vld1q_f32( &Cg[(i+2)*n+j+(4*VL)] );
+      vC2_5 = vld1q_f32( &Cg[(i+2)*n+j+(5*VL)] );                  
+
+      vC3_0 = vld1q_f32( &Cg[(i+3)*n+j+(0*VL)] );
+      vC3_1 = vld1q_f32( &Cg[(i+3)*n+j+(1*VL)] );
+      vC3_2 = vld1q_f32( &Cg[(i+3)*n+j+(2*VL)] );
+      vC3_3 = vld1q_f32( &Cg[(i+3)*n+j+(3*VL)] );
+      vC3_4 = vld1q_f32( &Cg[(i+3)*n+j+(4*VL)] );
+      vC3_5 = vld1q_f32( &Cg[(i+3)*n+j+(5*VL)] );                  
       
-      for(int ii = 0; ii < II_BLK; ii++) {      
-	for(int jj = 0; jj < (JJ_BLK/4); jj++) {
-	  vst1q_f32( &Cg[(i+ii)*n+j+(jj*4)], vC_tile[ii][jj]);
+
+      for(int k = 0; k < _k; k+=KK_BLK) {
+	for(int kk = 0; kk < KK_BLK; kk++) {
+	  
+	  float32x4_t vA = vdupq_n_f32(Ag[(i+0)*_k+(k+kk)]);
+	  
+	  float32x4_t vB0 = vld1q_f32(&Bg[(k+kk)*m+j+(0*VL)]);
+	  float32x4_t vB1 = vld1q_f32(&Bg[(k+kk)*m+j+(1*VL)]);
+	  float32x4_t vB2 = vld1q_f32(&Bg[(k+kk)*m+j+(2*VL)]);
+	  float32x4_t vB3 = vld1q_f32(&Bg[(k+kk)*m+j+(3*VL)]);
+	  float32x4_t vB4 = vld1q_f32(&Bg[(k+kk)*m+j+(4*VL)]);
+	  float32x4_t vB5 = vld1q_f32(&Bg[(k+kk)*m+j+(5*VL)]);
+	  
+	  vC0_0 = vmlaq_f32(vC0_0, vA, vB0);
+	  vC0_1 = vmlaq_f32(vC0_1, vA, vB1);
+	  vC0_2 = vmlaq_f32(vC0_2, vA, vB2);
+	  vC0_3 = vmlaq_f32(vC0_3, vA, vB3);
+	  vC0_4 = vmlaq_f32(vC0_4, vA, vB4);
+	  vC0_5 = vmlaq_f32(vC0_5, vA, vB5);	  	  
+
+	  //i = 1
+	  vA = vdupq_n_f32(Ag[(i+1)*_k+(k+kk)]);
+	  vC1_0 = vmlaq_f32(vC1_0, vA, vB0);
+	  vC1_1 = vmlaq_f32(vC1_1, vA, vB1);
+	  vC1_2 = vmlaq_f32(vC1_2, vA, vB2);
+	  vC1_3 = vmlaq_f32(vC1_3, vA, vB3);
+	  vC1_4 = vmlaq_f32(vC1_4, vA, vB4);
+	  vC1_5 = vmlaq_f32(vC1_5, vA, vB5);	  	  
+
+	  //i = 2
+	  vA = vdupq_n_f32(Ag[(i+2)*_k+(k+kk)]);
+	  vC2_0 = vmlaq_f32(vC2_0, vA, vB0);
+	  vC2_1 = vmlaq_f32(vC2_1, vA, vB1);
+	  vC2_2 = vmlaq_f32(vC2_2, vA, vB2);
+	  vC2_3 = vmlaq_f32(vC2_3, vA, vB3);
+	  vC2_4 = vmlaq_f32(vC2_4, vA, vB4);
+	  vC2_5 = vmlaq_f32(vC2_5, vA, vB5);	  	  
+
+	  //i = 3
+	  vA = vdupq_n_f32(Ag[(i+3)*_k+(k+kk)]);
+	  vC3_0 = vmlaq_f32(vC3_0, vA, vB0);
+	  vC3_1 = vmlaq_f32(vC3_1, vA, vB1);
+	  vC3_2 = vmlaq_f32(vC3_2, vA, vB2);
+	  vC3_3 = vmlaq_f32(vC3_3, vA, vB3);
+	  vC3_4 = vmlaq_f32(vC3_4, vA, vB4);
+	  vC3_5 = vmlaq_f32(vC3_5, vA, vB5);	  	  
 	}
       }
-      
+
+      vst1q_f32( &Cg[(i+0)*n+j+(0*VL)], vC0_0 );
+      vst1q_f32( &Cg[(i+0)*n+j+(1*VL)], vC0_1 );
+      vst1q_f32( &Cg[(i+0)*n+j+(2*VL)], vC0_2 );
+      vst1q_f32( &Cg[(i+0)*n+j+(3*VL)], vC0_3 );
+      vst1q_f32( &Cg[(i+0)*n+j+(4*VL)], vC0_4 );
+      vst1q_f32( &Cg[(i+0)*n+j+(5*VL)], vC0_5 );    
+
+      vst1q_f32( &Cg[(i+1)*n+j+(0*VL)], vC1_0 );
+      vst1q_f32( &Cg[(i+1)*n+j+(1*VL)], vC1_1 );
+      vst1q_f32( &Cg[(i+1)*n+j+(2*VL)], vC1_2 );
+      vst1q_f32( &Cg[(i+1)*n+j+(3*VL)], vC1_3 );
+      vst1q_f32( &Cg[(i+1)*n+j+(4*VL)], vC1_4 );
+      vst1q_f32( &Cg[(i+1)*n+j+(5*VL)], vC1_5 );    
+
+      vst1q_f32( &Cg[(i+2)*n+j+(0*VL)], vC2_0 );
+      vst1q_f32( &Cg[(i+2)*n+j+(1*VL)], vC2_1 );
+      vst1q_f32( &Cg[(i+2)*n+j+(2*VL)], vC2_2 );
+      vst1q_f32( &Cg[(i+2)*n+j+(3*VL)], vC2_3 );
+      vst1q_f32( &Cg[(i+2)*n+j+(4*VL)], vC2_4 );
+      vst1q_f32( &Cg[(i+2)*n+j+(5*VL)], vC2_5 );    
+
+      vst1q_f32( &Cg[(i+3)*n+j+(0*VL)], vC3_0 );
+      vst1q_f32( &Cg[(i+3)*n+j+(1*VL)], vC3_1 );
+      vst1q_f32( &Cg[(i+3)*n+j+(2*VL)], vC3_2 );
+      vst1q_f32( &Cg[(i+3)*n+j+(3*VL)], vC3_3 );
+      vst1q_f32( &Cg[(i+3)*n+j+(4*VL)], vC3_4 );
+      vst1q_f32( &Cg[(i+3)*n+j+(5*VL)], vC3_5 );    
     }
   }
   
@@ -94,7 +186,7 @@ T rand() {
 
 int main() {
   uint32_t l = 240;
-  assert((l % 6) == 0);
+  assert((l % 12) == 0);
   uint32_t n = l ,m= l ,k= l;
 
   print_var(n);
