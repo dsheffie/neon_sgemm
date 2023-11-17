@@ -9,7 +9,8 @@
 #include <time.h>
 #include <arm_neon.h>
 
-
+#include <Accelerate/Accelerate.h>
+  
 double timestamp() {
   struct timeval tv;
   gettimeofday(&tv, nullptr);
@@ -72,15 +73,15 @@ void gemm(float *Cg, float *Ag, float *Bg, int n, int m, int _k) {
 	    vC3_5 = vld1q_f32( &Cg[(i+3)*n+j+(5*VL)] );                  
 
 	    for(int k = kk; k < (kk+CACHE_BLK); k++) {
-	      vA = vdupq_n_f32(Ag[(i+0)*_k+k]);
-	      
 	      vB0 = vld1q_f32(&Bg[(k)*m+j+(0*VL)]);
 	      vB1 = vld1q_f32(&Bg[(k)*m+j+(1*VL)]);
 	      vB2 = vld1q_f32(&Bg[(k)*m+j+(2*VL)]);
 	      vB3 = vld1q_f32(&Bg[(k)*m+j+(3*VL)]);
 	      vB4 = vld1q_f32(&Bg[(k)*m+j+(4*VL)]);
 	      vB5 = vld1q_f32(&Bg[(k)*m+j+(5*VL)]);
-	      
+
+	      //i = 0
+	      vA = vdupq_n_f32(Ag[(i+0)*_k+k]);
 	      vC0_0 = vmlaq_f32(vC0_0, vA, vB0);
 	      vC0_1 = vmlaq_f32(vC0_1, vA, vB1);
 	      vC0_2 = vmlaq_f32(vC0_2, vA, vB2);
@@ -216,11 +217,13 @@ int main() {
 
   std::cout << "optimized gemm " << gflops/(t1-t0) << " gflops/s\n";
 
+  // while(1) {
   t0 = timestamp();
-  naive_gemm<float>(C1,A,B,n,m,k);
+  cblas_sgemm(CblasRowMajor,CblasNoTrans,CblasNoTrans,m,n,k,1.0f,A,k,B,m,0.0f,C1,n);
+  //naive_gemm<float>(C1,A,B,n,m,k);
   t1 = timestamp();
-
   std::cout << "naive gemm " << gflops/(t1-t0) << " gflops/s\n";
+  //}
 
   
   float max_e = 0.0f;

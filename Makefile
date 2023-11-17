@@ -1,7 +1,7 @@
 OBJ = gemm.o
 CXX = clang++
 EXE = gemm
-OPT = -O3
+OPT = -O3 -framework Accelerate
 CXXFLAGS = -std=c++11 -g $(OPT)
 CFLAGS = -std=c11 -g $(OPT)
 DEP = $(OBJ:.o=.d)
